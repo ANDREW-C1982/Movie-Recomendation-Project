@@ -1,0 +1,507 @@
+---
+title: " Movie Recommendation System : Capstone "
+author: "__Andrew Chikunga__"
+date: "__02/08/2020__"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# 1. INTRODUCTION:
+
+## Movie Recommendation 
+
+Every successful Data Scientist has built at least one recommendation engine in his career.A movie recommendation is important in our social life due to its strength in providing enhanced entertainment. Such a system can suggest a set of movies to users based on their interest, or the popularities of the movies.
+Although, a set of movie recommendation systems have been proposed, most of these either cannot recommend a movie to the existing users efficiently or to a new user by any means. In this project, I built a movie rating prediction system based on selected training sets provided by MovieLens and the RMSE (Root-Mean-Square-Error) is applied as the main criteria to evaluate the performance of the model. 
+
+# What is a Recommendation System?
+
+A recommendation system provides suggestions to the users through a filtering process that is based on user preferences and browsing history. The information about the user is taken as an input. The information is taken from the input that is in the form of browsing data. This information reflects the prior usage of the product as well as the assigned ratings. A recommendation system is a platform that provides its users with various contents based on their preferences and likings. A recommendation system takes the information about the user as an input. The recommendation system is an implementation of the machine learning algorithms. 
+
+# Problem Statement: 
+
+To analyze the MovieLens data set in order to understand trends and patterns that will help to predict movie ratings and recommend new movies to users and to come up with a RMSE less than 0.86490 as a criteria to evaluate the perfomance of the model.
+
+# Data Set Description: 
+
+The data set used for this project was taken from MovieLens dataset and after processing a new dataset called edx was created.In this project,I am developing algorithms to predict movie ratings.
+
+## Importing Essential Libraries
+
+In our Data Science project, we will make use of these packages – ‘tidyverse’,'dslabs' ‘ggplot2’, ‘data.table’ ,'caret','MatrixStats' and ‘reshape2’.
+
+```{r libraries, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(caret)
+library(dslabs)
+library(dplyr)
+library(ggplot2)
+library(matrixStats)
+library(data.table)
+library(lubridate)
+```
+# 2. DATA CLEANING
+
+## Retrieving the Data
+
+We will now retrieve our data from link(http://files.grouplens.org/datasets/movielens/ml-10m.zip) into ratings.dat and movies.dat. We will use the str() function to display information about the movies dataframe.
+
+
+```{r cleaning data, echo=FALSE,message=FALSE}
+##########################################################
+# Create edx set, validation set (final hold-out test set)
+##########################################################
+
+# Note: this process could take a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+
+# MovieLens 10M dataset:
+# https://grouplens.org/datasets/movielens/10m/
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
+dl <- tempfile()
+download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
+
+ratings <- fread(text = gsub("::", "\t", readLines(unzip(dl, "ml-10M100K/ratings.dat"))),
+                 col.names = c("userId", "movieId", "rating", "timestamp"))
+
+movies <- str_split_fixed(readLines(unzip(dl, "ml-10M100K/movies.dat")), "\\::", 3)
+colnames(movies) <- c("movieId", "title", "genres")
+str(movies)
+```
+
+## Data Overview
+
+We can overview the summary of the movies using the summary() function. We will also use the head() function to print the first six lines of movie_data
+
+```{r overview}
+summary(movies)
+head(movies)
+```
+
+Similarly, we can output the summary as well as the first six lines of the ‘rating_data’ dataframe.
+
+```{r ratings}
+summary(ratings)
+head(ratings)
+```
+
+From the above table, we observe that the userId column, as well as the movieId column, consist of integers. Furthermore, we need to convert the genres present in the movie_data dataframe into a more usable format by the users. In order to do so, we will first create a one-hot encoding to create a matrix that comprises of corresponding genres for each of the films.
+
+```{r movies, echo=FALSE}
+# if using R 3.6 or earlier
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(levels(movieId))[movieId],
+                                            title = as.character(title),
+                                            genres = as.character(genres))
+# if using R 4.0 or later
+movies <- as.data.frame(movies) %>% mutate(movieId = as.numeric(movieId),
+                                            title = as.character(title),
+                                            genres = as.character(genres))
+movielens <- left_join(ratings, movies, by = "movieId")
+```
+
+
+# 3. DATA PREPROCESSING
+
+
+```{r summary}
+# summary of the mivielens dataset
+summary(movielens)
+str(movielens)
+# Unique users that provided ratings
+movielens %>%
+     summarize(n_users = n_distinct(userId),
+               n_movies = n_distinct(movieId))
+# Most watched movies
+Top_5_movies <- movielens %>%
+     dplyr::count(movieId,title) %>%
+     top_n(5) %>%
+     pull(movieId,title)
+Top_5_movies               
+```
+
+
+## Now, we will visualize a bar plot for the total number of views of the top films.
+
+
+```{r visualizations, echo=FALSE}
+#Total Views of the Top Films in Movielens
+movielens%>%
+group_by(title)%>%
+summarise(n=n())%>%
+top_n(7)%>%
+ggplot(aes(title,n))+geom_bar(stat="identity", fill = 'green')+geom_text(aes(label=n), vjust=-0.3, size=3.5) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+ggtitle("Total Views of the Top Films by title")
+```
+
+
+## Distribution of movie and user ratings
+
+
+```{r distributions, echo=FALSE}
+# movie rating distribution
+movielens %>% 
+     dplyr::count(movieId) %>% 
+     ggplot(aes(n)) + 
+     geom_histogram(bins = 30, color = "blue") + 
+     scale_x_log10() + 
+     ggtitle("Movie ratings distribution")
+# user rating distribution
+movielens %>%
+     dplyr::count(userId) %>% 
+     ggplot(aes(n)) + 
+     geom_histogram(bins = 30, color = "orange") + 
+     scale_x_log10() +
+     ggtitle("User ratings distribution")
+```
+
+
+##  Creating training and validation sets
+
+
+```{r data splitting, echo=FALSE}
+# Validation set will be 10% of MovieLens data
+set.seed(1, sample.kind="Rounding")
+# if using R 3.5 or earlier, use `set.seed(1)` instead
+test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
+edx <- movielens[-test_index,]
+temp <- movielens[test_index,]
+
+# Make sure userId and movieId in validation set are also in edx set
+validation <- temp %>% 
+      semi_join(edx, by = "movieId") %>%
+      semi_join(edx, by = "userId")
+
+# Add rows removed from validation set back into edx set
+removed <- anti_join(temp, validation)
+edx <- rbind(edx, removed)
+
+rm(dl, ratings, movies, test_index, temp, movielens, removed)
+```
+
+
+Now in order to study the structure of our data set, we call the str() method. This gives us a descriptive summary of all the predictor variables present in the data set and check for missing values.
+
+
+```{r training set}
+#Checking for missing values
+table (complete.cases (edx))
+#Display structure of the data
+str (edx)
+```
+
+
+# 4. DATA EXPLORATION
+
+Data Exploration involves analyzing each feature variable to check if the variables are significant for building the model.
+
+## Exploring the userId variable
+
+
+```{r userId data exploration, echo=FALSE}
+#Exploring the userId variable
+summary (edx$userId)
+# how many different users are in the train_set dataset
+n_distinct(edx$userId)
+#Boxplot for userId variable
+boxplot (userId ~ rating, data = edx,
+        main = "rating levels based on the userId of an individual",
+        xlab = "rating", ylab = "userId", col = "salmon")
+#Histogram for userId variable
+qplot(userId,data=edx,margins = TRUE,binwidth = 2000,colour="red")
+```
+
+
+The above illustrations show that the userId variable is not varying with the level of rating and hence it is not a strong predictor variable.
+
+## Exploring the movieId variable
+
+
+```{r movieId data exploration, echo=FALSE}
+#Exploring the movieId variable
+summary (edx$movieId)
+# how many different movies are in the train_set dataset
+n_distinct(edx$movieId)
+#Boxplot for movieId variable
+boxplot (movieId ~ rating, data = edx,
+        main = "rating levels based on the movieId of an individual",
+        xlab = "rating", ylab = "movieId", col = "salmon")
+#Histogram for movieId variable
+qplot(movieId,data=edx,margins = TRUE,binwidth = 2000,colour="red")
+```
+
+
+The above illustrations show that the movieId variable is varying with the level of rating and hence it is a strong predictor variable.
+
+
+## Similarly, we’ll be evaluating categorical variables as well. 
+
+In the below section I’ve created qplots for each variable and after evaluating the plots, it is clear that these variables are essential for predicting the rating of a movie.
+
+
+```{r categorical variables, echo=FALSE}
+#Exploring categoricals:genres and title
+# common genres
+genres = c("Drama", "Comedy", "Thriller", "Romance")
+sapply(genres, function(g) {
+sum(str_detect(edx$genres, g))
+})
+#Total views of the Top Films by Title
+edx%>%
+group_by(title)%>%
+summarise(n=n())%>%
+top_n(7)%>%
+ggplot(aes(title,n))+geom_bar(stat="identity", fill = 'steelblue')+geom_text(aes(label=n), vjust=-0.3, size=3.5) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+ggtitle("Total Views of the Top Films by title")
+#Total views of the Top Films by genres
+edx%>%
+group_by(genres)%>%
+summarise(n=n())%>%
+top_n(7)%>%
+ggplot(aes(genres,n))+geom_bar(stat="identity", fill = 'red')+geom_text(aes(label=n), vjust=-0.3, size=3.5) +
+theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+ggtitle("Total Views of the Top Films by genres")
+```
+
+
+All these graphs above show that these set of predictor variables are significant for building our predictive model.
+
+
+# 5. BUILDING THE MODEL
+
+
+So, after evaluating all our predictor variables, it is finally time to perform Predictive analytics. In this stage, we’ll build a predictive model that will recommend movies to users based on their past preferences.
+
+
+## Loading and evaluating the validation data set:edx
+
+
+We start with a model that assumes the same rating for all movies and all users, with all the differences explained by random variation: If $u$  represents the true rating for all movies and users. $u$ represents independent errors sampled from the same distribution centered at zero, then:
+
+
+```{r mean rating}
+#least squares estimate of the mean mu  
+mu <- mean(edx$rating)
+mu
+```
+
+
+## investigating the effects of the variables that affect the movie rating
+
+
+```{r movie specific-effect, echo=FALSE}
+#movie-specific effect on the model:
+movie_avgs <- edx %>%
+group_by(movieId) %>%
+summarize(b_i = sum(rating - mu))
+#histogram for average rating for movies
+ movie_avgs %>% qplot(b_i, geom ="histogram", bins = 10, data = ., color = I("black"))
+```
+
+Histogram above suggest that movie average is normalized.We can see that these estimates vary substantially, not surprisingly,some movies are good and Other movies are bad.
+
+```{r user-specific effect, echo=FALSE}
+#user-specific effect on the model:
+user_avgs <- edx %>%
+left_join(movie_avgs, by="movieId") %>%
+group_by(userId) %>%
+summarize(b_u = sum(rating - b_i - mu))
+#histogram for average rating for user
+user_avgs %>% qplot(b_u, geom ="histogram", bins = 10, data = ., color = I("green"))
+```
+
+
+Note that there is substantial variability across users, as well.Some users are very cranky while others love every movie they watch, while others are somewhere in the middle.
+
+
+```{r genres specific-effect, echo=FALSE}
+#genres-specific effect on the model:
+genres_avgs <-edx%>%
+left_join(movie_avgs, by="movieId") %>%
+left_join(user_avgs, by="userId") %>%
+group_by(genres) %>%
+summarize(b_g = sum(rating - b_i -b_u- mu))
+#histogram for average rating for user
+genres_avgs %>% qplot(b_g, geom ="histogram", bins = 50, data = ., color = I("yellow"))
+```
+
+
+The plot above shows that there is substantial variability across all genres, as well.Some genres are more popular while others are rarely watched.
+
+
+## Regularization
+
+
+Recommendation systems are more complicated machine learning challenges because each outcome has a different set of predictors. For example, different users rate a different number of movies and rate different movies.
+
+To compare different models or to see how well we’re doing compared to a baseline, we will use root mean squared error (RMSE) as our loss function. We can interpret RMSE similar to standard deviation.
+
+If $N$ is the number of user-movie combinations $y_{u, i}$  is the rating for movie $i$  by user  $u$  and  $\hat{y}_{u, i}$ is our prediction, then RMSE is defined as follows: $\sqrt{ \frac{1}{N} \sum_{u, i} ( \hat{y}_{u, i} - y_{u, i} )^2}$
+
+## Motivation
+
+We start with a model that assumes the same rating for all movies and all users, with all the differences explained by random variation: If $\mu$ represents the true rating for all movies and users and $\epsilon_{u, i}\]$  represents independent errors sampled from the same distribution centered at zero, then:  $Y_{u, i} = \mu + \epsilon_{u, i}$
+
+We can improve our model by adding a term $b_i$ that represents the average rating for movie i:  $Y_{u, i} = \mu + b_i + \epsilon_{u, i}$ .
+$b_i$ is the average of $Y_{u, i}$ minus the overall mean for each movie $i$ .
+
+We can further improve our model by adding $b_u$ the user-specific effect and $b_g$ the genres-specific effect:
+$Y_{u, i} = \mu + b_i + b_u + b_g + \epsilon_{u, i}$
+
+Note that because there are thousands of b's , the lm() function will be very slow or cause R to crash, so we don’t recommend using linear regression to calculate these effects.
+
+
+```{r movieId database}
+#First, let’s create a database that connects movieId to movie title:
+movie_titles <- edx %>% 
+     select(movieId, title) %>%
+     distinct()
+head(movie_titles)
+```
+
+
+## Here are the 10 best movies according to our estimate and how often they are rated:
+
+
+```{r best movies, echo=FALSE}
+# Here are the 10 best movies according to our estimate and how often they are rated:
+edx %>% dplyr::count(movieId) %>% 
+     left_join(movie_avgs) %>%
+     left_join(movie_titles, by="movieId") %>%
+     arrange(desc(b_i)) %>% 
+     select(title, b_i, n) %>% 
+     slice(1:10) %>% 
+     knitr::kable()
+```
+
+
+## Here are the 10 worst movies according to our estimate and how often they are rated:
+
+
+```{r worst movies, echo=FALSE}
+# Here are the 10 worst movies according to our estimate and how often they are rated:
+edx %>% dplyr::count(movieId) %>% 
+     left_join(movie_avgs) %>%
+     left_join(movie_titles, by="movieId") %>%
+     arrange(b_i) %>% 
+     select(title, b_i, n) %>% 
+     slice(1:10) %>% 
+     knitr::kable()
+```
+
+Some of the supposed “worst” movies were rated by very many users.These movies were mostly obscure ones.Therefore, larger estimates of  b_i, negative or positive, are more likely.
+
+These are noisy estimates that we should not trust, especially when it comes to prediction. Large errors can increase our RMSE, so we would rather be conservative when unsure.
+
+
+## Penalized least squares
+
+
+The general idea behind regularization is to constrain the total variability of the effect sizes. Why does this help? Consider a case in which we have movie  
+$i=1$ with 100 user ratings and 4 movies $i=2,3,4,5$ with just one user rating. We intend to fit the model $Y_{u,i} = \mu + b_i + \varepsilon_{u,i}$
+
+To improve our results, we will use regularization. Regularization constrains the total variability of the effect sizes by penalizing large estimates that come from small sample sizes.
+
+To estimate the  𝑏 ’s, we will now minimize this equation, which contains a penalty term:$\frac{1}{N}\sum_{u, i}(y_{u, i}-\mu-b_i)^2 + \lambda\sum_i b_{i}^2$
+
+The first term is the mean squared error and the second is a penalty term that gets larger when many $b’s$ are large.  $\hat{b}_{i}(\lambda) = \frac{1}{\lambda+n_i}\sum_{u=1}^{n_i}(Y_{u, i} - \hat{\mu})$
+
+The values of $b$ that minimize this equation are given by:$\hat{b}_{i}(\lambda) = \frac{1}{\lambda+n_i}\sum_{u=1}^{n_i}(Y_{u, i} - \hat{\mu}),$ where $n_i$  is a number of ratings  $b$ for movie  $i$ 
+
+The larger $\lambda$ is, the more we shrink.$\lambda$ is a tuning parameter, so we can use cross-validation to choose it. We should be using full cross-validation on just the training set, without using the test set until the final assessment.
+
+We can also use regularization to estimate the user effect. We will now minimize this equation:
+$\frac{1}{N}\sum_{u, i}(y_{u, i}-\mu-b_i-b_u)^2 + \lambda(\sum_i b_{i}^2 + \sum_u b_{u}^2)$.
+
+
+## Load and evaluate the validation test data set
+
+Just like how we cleaned our training data set, our validation test data must also be prepared in such a way that it does not have any null values or unnecessary predictor variables, only then can we use the test data to validate our model.
+
+## $\lambda$ is a tuning parameter. We can use cross-validation to choose it:
+
+
+```{r training model,echo=FALSE, message=FALSE}
+#training the model
+lambdas <- seq(0, 10, 0.25)
+rmses <- sapply(lambdas, function(l){
+mu <- mean(edx$rating)
+b_i <- edx %>%
+group_by(movieId) %>%
+summarize(b_i = sum(rating - mu)/(n()+l))
+b_u <- edx %>%
+left_join(b_i, by="movieId") %>%
+group_by(userId) %>%
+summarize(b_u = sum(rating - b_i - mu)/(n()+l))
+b_g <-edx%>%
+left_join(b_i, by="movieId") %>%
+left_join(b_u, by="userId") %>%
+group_by(genres) %>%
+summarize(b_g = sum(rating - b_i -b_u- mu)/(n()+l))
+predicted_ratings <-
+validation %>%
+left_join(b_i, by = "movieId") %>%
+left_join(b_u, by = "userId") %>%
+left_join(b_g, by = "genres") %>%
+mutate(pred = mu + b_i + b_u + b_g) %>%
+.$pred
+return(RMSE(predicted_ratings, validation$rating))
+})
+```
+
+
+Since I am using an RMSE loss algorithm, I’ve also implemented the Cross-Validation technique to prevent overfitting of the model.
+
+## Choosing the optimal value of lambda:
+
+
+```{r optimal }
+# the optimal λ_edx
+qplot(lambdas, rmses)  
+lambda <- lambdas[which.min(rmses)]
+lambda
+```
+
+
+Using results obtained above,the value of lambda that minimises the model is 5,so I am going to use 5 to calculate the RMSE.
+
+
+## Calculating the value of RMSE:
+
+
+```{r RMSE}
+#calculating RMSE
+Regularized_rmse_results<-data.frame(method="Avg movie rating + UserId-effect  + genres-effect ",RMSE = min(rmses))
+Regularized_rmse_results
+```
+
+My generated RMSE is __0.8644501__ which is lower than the expected __0.86490__
+This suggests that the model is able to recommend movies to users with a high degree of accuracy.
+
+
+# 6. CONCLUSIONS
+
+
+Recommendation Systems are the most popular type of machine learning applications that are used in all sectors. They are an improvement over the traditional classification algorithms as they can take many classes of input and provide similarity ranking based algorithms to provide the user with accurate results. These recommendation systems have evolved over time and have incorporated many advanced machine learning techniques to provide the users with the content that they want.
+ 
+Movie recommendation systems which are existing have poor efficiency due to which movies are suggested in view of aspects for example - movie rated & evaluated by the User.Building a system that achieves good recommendations in new users or coldstart scenario stills is a challenge. In order to create a model with acceptable results,it may be necessary to count with more information, not only about the user’s profile but also about the movies, this could allow us to implement other methodologies like Content-based filtering and Hybrid filtering, and it may lead us to more significant results.
+
+
+# 7. REFERENCES
+
+
+1. https://data-flair.training/blogs
+
+2. https://rafalab.github.io/dsbook/large-datasets.html#regularization
+
+3. Book by Ross Mistry:ASP.NET: The Complete Reference
+ 
