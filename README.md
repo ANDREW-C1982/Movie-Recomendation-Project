@@ -1,0 +1,1 @@
+# Movie-Recomendation-Project:In this project, I built a movie rating prediction system based on selected training sets provided by MovieLens and the RMSE (Root-Mean-Square-Error) is applied as the main criteria to evaluate the performance of the model.
